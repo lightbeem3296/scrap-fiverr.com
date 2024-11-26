@@ -141,7 +141,7 @@ class Chrome:
                 cmd.append(f"--window-position={self._left},{self._top: int}")
 
             if self._width * self._height != 0:
-                cmd.append(f"--window-size={self._width: int},{self._height}")
+                cmd.append(f"--window-size={self._width},{self._height}")
 
             if self._block_image:
                 cmd.append("--blink-settings=imagesEnabled=false")
@@ -172,7 +172,7 @@ class Chrome:
             self._client_unit.close()
             self._client_unit = None
 
-        self._width: int = 0
+        self._width = 0
         self._height = 0
         self._block_image = True
 
