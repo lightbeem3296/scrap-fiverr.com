@@ -1,34 +1,44 @@
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List
 
 import pyautogui
-from bs4 import BeautifulSoup
 from loguru import logger
 
 from libchrome import Chrome
 
-CATEGORY_LINKS = [
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/custom-gpts",
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/ai-agents-development",
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/ai-fine-tuning",
-    "https://www.fiverr.com/categories/programming-tech/software-development/scripting",
-    "https://www.fiverr.com/categories/programming-tech/support-it-services/server-administrations",
-    "https://www.fiverr.com/categories/programming-tech/chatbots",
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/ai-chatbot",
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/ai-applications",
-    "https://www.fiverr.com/categories/programming-tech/ai-coding/ai-integrations",
-]
-
 CUR_DIR = Path(__file__).parent
-CATEGORY_DIR = CUR_DIR / "categories"
-CATEGORY_DIR.mkdir(parents=True, exist_ok=True)
+PAGES_DIR = CUR_DIR / "pages"
+OUTPUT_DIR = CUR_DIR / "output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 CAPTCHA_START_IMG_PATH = CUR_DIR / "captcha_start.png"
 CAPTCHA_END_IMG_PATH = CUR_DIR / "captcha_end.png"
 
-USER_DATA_DIR = CUR_DIR / "profile"
+USER_DATA_DIR = CUR_DIR / "temp" / "profile"
+
+
+def load_links() -> Dict[str, List[str]]:
+    link_list: Dict[str, List[str]] = {}
+
+    fnames = os.listdir(PAGES_DIR)
+    for fname in fnames:
+        fpath = PAGES_DIR / fname
+        if not fpath.is_file():
+            continue
+
+        cat_name = os.path.splitext(fname)[0]
+        link_list[cat_name] = []
+
+        with fpath.open("r") as file:
+            for line in file:
+                gig = json.loads(line)
+                link_list[cat_name].append("https://www.fiverr.com" + gig["gig_url"])
+
+    return link_list
 
 
 def check_captcha(chrome: Chrome, wait_elem_selector: str):
@@ -87,6 +97,8 @@ def check_captcha(chrome: Chrome, wait_elem_selector: str):
 
 
 def main():
+    link_list = load_links()
+
     chrome = Chrome(
         width=800,
         height=600,
@@ -95,48 +107,40 @@ def main():
     )
     chrome.start()
 
-    for category_index, category_link in enumerate(CATEGORY_LINKS):
-        category_dpath = CATEGORY_DIR / f"{category_index}"
-        category_dpath.mkdir(parents=True, exist_ok=True)
+    for cat_name in link_list:
+        links = link_list[cat_name]
+        cat_dpath = OUTPUT_DIR / cat_name
+        cat_dpath.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"category: {category_index} > {category_link}")
+        for profile_index, profile_link in enumerate(links):
+            logger.info(f"cat: {cat_name}, profile: {profile_index}/{len(links)}")
 
-        # goto category page
-        chrome.goto(category_link, wait_elem_selector="form.search-form")
-        check_captcha(chrome=chrome, wait_elem_selector="form.search-form")
+            profile_fpath = cat_dpath / f"{profile_index}.json"
+            already_done = False
+            if profile_fpath.is_file():
+                with profile_fpath.open("r") as file:
+                    json_data = json.load(file)
+                    if "cat" in json_data and "profile":
+                        already_done = True
 
-        page_number = 0
+            if already_done:
+                logger.info("already done")
+                continue
 
-        # loop all pages
-        while True:
-            page_number += 1
-            logger.info(f"page: {page_number}")
-
-            page_fpath = category_dpath / f"{page_number}.json"
+            chrome.goto(profile_link, wait_elem_selector="form.search-form")
+            check_captcha(chrome=chrome, wait_elem_selector="form.search-form")
 
             body_html = chrome.body()
-            soup = BeautifulSoup(body_html, "html.parser")
 
-            with page_fpath.open("w") as file:
+            with profile_fpath.open("w") as file:
                 json.dump(
                     {
-                        "category": category_index,
-                        "page": page_number,
+                        "cat": cat_name,
+                        "profile": profile_index,
                         "html": body_html,
                     },
                     file,
-                    indent=2,
                 )
-
-            # goto next page
-            next_btn = soup.select_one("a[aria-label=Next]")
-            if next_btn is None:
-                logger.info("next page btn not found")
-                break
-            else:
-                next_page_link = next_btn.attrs["href"]
-                chrome.goto(next_page_link, wait_elem_selector="form.search-form")
-                check_captcha(chrome=chrome, wait_elem_selector="form.search-form")
 
     chrome.quit()
 
