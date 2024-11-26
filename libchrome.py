@@ -89,7 +89,6 @@ class Chrome:
 
     def _start_websocket_server(self, port: int):
         def echo(websocket):
-            logger.info("client connected")
             self._client_unit = websocket
             while True:
                 time.sleep(1)
