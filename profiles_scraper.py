@@ -98,6 +98,7 @@ def check_captcha(chrome: Chrome, wait_elem_selector: str):
         except Exception as ex:
             logger.exception(ex)
             chrome.run_script("location.reload()")
+            time.sleep(10)
 
 
 def main():
