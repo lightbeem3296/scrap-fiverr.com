@@ -43,57 +43,61 @@ def load_links() -> Dict[str, List[str]]:
 
 def check_captcha(chrome: Chrome, wait_elem_selector: str):
     while True:
-        wait_elem = chrome.select_one(wait_elem_selector)
-        if wait_elem is not None:
-            break
+        try:
+            wait_elem = chrome.select_one(wait_elem_selector)
+            if wait_elem is not None:
+                break
 
-        captcha_title = chrome.select_one("h1[data-identifier=title]")
-        if captcha_title is None:
-            return
+            captcha_title = chrome.select_one("h1[data-identifier=title]")
+            if captcha_title is None:
+                return
 
-        if captcha_title().strip() == "It needs a human touch":
-            logger.info("captcha detected")
+            if captcha_title().strip() == "It needs a human touch":
+                logger.info("captcha detected")
 
-            # wait until captcha start button
-            logger.info("waiting for captcha button ...")
-            img_box = None
-            while img_box is None:
-                try:
-                    img_box = pyautogui.locateOnScreen(
-                        str(CAPTCHA_START_IMG_PATH),
-                        grayscale=True,
-                        confidence=0.9,
-                    )
-                except Exception as ex:
-                    logger.exception(ex)
-                time.sleep(0.1)
-            logger.info(f"captcha detected at {img_box}")
+                # wait until captcha start button
+                logger.info("waiting for captcha button ...")
+                img_box = None
+                while img_box is None:
+                    try:
+                        img_box = pyautogui.locateOnScreen(
+                            str(CAPTCHA_START_IMG_PATH),
+                            grayscale=True,
+                            confidence=0.9,
+                        )
+                    except Exception as ex:
+                        logger.exception(ex)
+                    time.sleep(0.1)
+                logger.info(f"captcha detected at {img_box}")
 
-            pyautogui.moveTo(
-                img_box.left + img_box.width // 2,
-                img_box.top + img_box.height // 2,
-                duration=0.1,
-            )
-            pyautogui.mouseDown()
+                pyautogui.moveTo(
+                    img_box.left + img_box.width // 2,
+                    img_box.top + img_box.height // 2,
+                    duration=0.1,
+                )
+                pyautogui.mouseDown()
 
-            logger.info("waiting for captcha done ...")
-            start = datetime.datetime.now().timestamp()
-            img_box = None
-            while img_box is None:
-                try:
-                    if datetime.datetime.now().timestamp() - start > 20:
-                        logger.error("waiting timeout")
-                        break
-                    img_box = pyautogui.locateOnScreen(
-                        str(CAPTCHA_END_IMG_PATH),
-                        grayscale=True,
-                        confidence=0.9,
-                    )
-                except:  # noqa: E722
-                    pass
-                time.sleep(0.1)
-            pyautogui.mouseUp()
-            logger.info("captcha done")
+                logger.info("waiting for captcha done ...")
+                start = datetime.now().timestamp()
+                img_box = None
+                while img_box is None:
+                    try:
+                        if datetime.now().timestamp() - start > 20:
+                            logger.error("waiting timeout")
+                            break
+                        img_box = pyautogui.locateOnScreen(
+                            str(CAPTCHA_END_IMG_PATH),
+                            grayscale=True,
+                            confidence=0.9,
+                        )
+                    except:  # noqa: E722
+                        pass
+                    time.sleep(0.1)
+                pyautogui.mouseUp()
+                logger.info("captcha done")
+        except Exception as ex:
+            logger.exception(ex)
+            chrome.run_script("location.reload()")
 
 
 def main():
