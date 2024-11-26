@@ -151,6 +151,8 @@ def main():
                 except Exception as ex:
                     logger.exception(ex)
 
+                chrome.quit()
+
                 user_data_dir = CUR_DIR / "temp" / f"profile_{time.time()}"
                 chrome = Chrome(
                     width=800,
