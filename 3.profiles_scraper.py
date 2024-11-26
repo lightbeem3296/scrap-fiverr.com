@@ -18,7 +18,6 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 CAPTCHA_START_IMG_PATH = CUR_DIR / "captcha_start.png"
 CAPTCHA_END_IMG_PATH = CUR_DIR / "captcha_end.png"
 
-USER_DATA_DIR = CUR_DIR / "temp" / "profile"
 
 
 def load_links() -> Dict[str, List[str]]:
@@ -97,18 +96,26 @@ def check_captcha(chrome: Chrome, wait_elem_selector: str):
                 logger.info("captcha done")
         except Exception as ex:
             logger.exception(ex)
-            chrome.run_script("location.reload()")
+            user_data_dir = CUR_DIR / "temp" / f"profile_{time.time()}"
+            chrome = Chrome(
+                width=800,
+                height=600,
+                block_image=True,
+                user_data_dir=str(user_data_dir),
+            )
+            chrome.start()
             time.sleep(10)
 
 
 def main():
     link_list = load_links()
 
+    user_data_dir = CUR_DIR / "temp" / f"profile_{time.time()}"
     chrome = Chrome(
         width=800,
         height=600,
         block_image=True,
-        user_data_dir=str(USER_DATA_DIR),
+        user_data_dir=str(user_data_dir),
     )
     chrome.start()
 
