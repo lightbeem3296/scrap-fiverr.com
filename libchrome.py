@@ -47,12 +47,12 @@ class Chrome:
         self._process = None
         self._client_unit: Optional[ServerConnection] = None
 
-    def __find_port(self) -> int:
+    def _find_port(self) -> int:
         with socket.socket() as s:
             s.bind(("", 0))  # Bind to a free port provided by the host
             return s.getsockname()[1]  # Return the assigned port number
 
-    def __send_command(self, msg: str, payload: Optional[str] = None) -> Any:
+    def _send_command(self, msg: str, payload: Optional[str] = None) -> Any:
         ret = None
         try:
             if self._client_unit is not None:
@@ -87,7 +87,7 @@ class Chrome:
             logger.exception(ex)
         return ret
 
-    def __start_server(self, port: int):
+    def _start_websocket_server(self, port: int):
         def echo(websocket):
             logger.info("client connected")
             self._client_unit = websocket
@@ -111,10 +111,10 @@ class Chrome:
 
         if os.path.isfile(chrome_path):
             # find free port
-            port = self.__find_port()
+            port = self._find_port()
 
             # start socket server
-            Thread(target=self.__start_server, args=(port,)).start()
+            Thread(target=self._start_websocket_server, args=(port,)).start()
 
             # copy extension to temp folder
             ext_dir = os.path.join(TEMP_DIR, f"ext_{datetime.now().timestamp()}")
@@ -177,7 +177,7 @@ class Chrome:
         self._block_image = True
 
     def run_script(self, script: str) -> Optional[str]:
-        return self.__send_command("runScript", script)
+        return self._send_command("runScript", script)
 
     def url(self) -> Optional[str]:
         return self.run_script("location.href")
@@ -229,10 +229,10 @@ class Chrome:
         return ret
 
     def cookie(self, domain: str) -> Any:
-        return self.__send_command("getCookie", domain)
+        return self._send_command("getCookie", domain)
 
     def clear_cookie(self):
-        return self.__send_command(
+        return self._send_command(
             "clearCookie",
         )
 
@@ -242,7 +242,7 @@ class Chrome:
     def body(self) -> Optional[str]:
         return self.run_script("document.body.outerHTML")
 
-    def select(self, selector: str) -> list[ChromeElem]:
+    def select_all(self, selector: str) -> list[ChromeElem]:
         ret = []
         jres = self.run_script(
             """
@@ -283,7 +283,7 @@ selectors;"""
         return ret
 
     def select_one(self, selector: str) -> Optional[ChromeElem]:
-        elems = self.select(selector=selector)
+        elems = self.select_all(selector=selector)
         if len(elems) > 0:
             return elems[0]
         else:
