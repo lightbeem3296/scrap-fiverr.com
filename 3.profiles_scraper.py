@@ -19,7 +19,6 @@ CAPTCHA_START_IMG_PATH = CUR_DIR / "captcha_start.png"
 CAPTCHA_END_IMG_PATH = CUR_DIR / "captcha_end.png"
 
 
-
 def load_links() -> Dict[str, List[str]]:
     link_list: Dict[str, List[str]] = {}
 
@@ -40,71 +39,62 @@ def load_links() -> Dict[str, List[str]]:
     return link_list
 
 
-def check_captcha(chrome: Chrome, wait_elem_selector: str):
-    while True:
-        try:
-            wait_elem = chrome.select_one(wait_elem_selector)
-            if wait_elem is not None:
-                break
+def check_captcha(chrome: Chrome, wait_elem_selector: str) -> bool:
+    wait_elem = chrome.select_one(wait_elem_selector)
+    if wait_elem is not None:
+        return True
 
-            captcha_title = chrome.select_one("h1[data-identifier=title]")
-            if captcha_title is None:
-                return
+    captcha_title = chrome.select_one("h1[data-identifier=title]")
+    if captcha_title is None:
+        return True
 
-            if captcha_title().strip() == "It needs a human touch":
-                logger.info("captcha detected")
+    if captcha_title().strip() == "It needs a human touch":
+        logger.info("captcha detected")
 
-                # wait until captcha start button
-                logger.info("waiting for captcha button ...")
-                img_box = None
-                while img_box is None:
-                    try:
-                        img_box = pyautogui.locateOnScreen(
-                            str(CAPTCHA_START_IMG_PATH),
-                            grayscale=True,
-                            confidence=0.9,
-                        )
-                    except Exception as ex:
-                        logger.exception(ex)
-                    time.sleep(0.1)
-                logger.info(f"captcha detected at {img_box}")
-
-                pyautogui.moveTo(
-                    img_box.left + img_box.width // 2,
-                    img_box.top + img_box.height // 2,
-                    duration=0.1,
+        # wait until captcha start button
+        logger.info("waiting for captcha button ...")
+        img_box = None
+        while img_box is None:
+            try:
+                img_box = pyautogui.locateOnScreen(
+                    str(CAPTCHA_START_IMG_PATH),
+                    grayscale=True,
+                    confidence=0.9,
                 )
-                pyautogui.mouseDown()
+            except Exception as ex:
+                logger.exception(ex)
+            time.sleep(0.1)
+        logger.info(f"captcha detected at {img_box}")
 
-                logger.info("waiting for captcha done ...")
-                start = datetime.now().timestamp()
-                img_box = None
-                while img_box is None:
-                    try:
-                        if datetime.now().timestamp() - start > 20:
-                            logger.error("waiting timeout")
-                            break
-                        img_box = pyautogui.locateOnScreen(
-                            str(CAPTCHA_END_IMG_PATH),
-                            grayscale=True,
-                            confidence=0.9,
-                        )
-                    except:  # noqa: E722
-                        pass
-                    time.sleep(0.1)
-                pyautogui.mouseUp()
-                logger.info("captcha done")
-        except Exception as ex:
-            logger.exception(ex)
-            user_data_dir = CUR_DIR / "temp" / f"profile_{time.time()}"
-            chrome = Chrome(
-                width=800,
-                height=600,
-                block_image=True,
-                user_data_dir=str(user_data_dir),
-            )
-            chrome.start()
-            time.sleep(10)
+        pyautogui.moveTo(
+            img_box.left + img_box.width // 2,
+            img_box.top + img_box.height // 2,
+            duration=0.1,
+        )
+        pyautogui.mouseDown()
+
+        logger.info("waiting for captcha done ...")
+        start = datetime.now().timestamp()
+        img_box = None
+        while img_box is None:
+            try:
+                if datetime.now().timestamp() - start > 20:
+                    logger.error("waiting timeout")
+                    break
+                img_box = pyautogui.locateOnScreen(
+                    str(CAPTCHA_END_IMG_PATH),
+                    grayscale=True,
+                    confidence=0.9,
+                )
+            except:  # noqa: E722
+                pass
+            time.sleep(0.1)
+        pyautogui.mouseUp()
+        logger.info("captcha done")
+
+        return True
+
+    return False
 
 
 def main():
@@ -139,20 +129,36 @@ def main():
                 logger.info("already done")
                 continue
 
-            chrome.goto(profile_link, wait_elem_selector="form.search-form")
-            check_captcha(chrome=chrome, wait_elem_selector="form.search-form")
+            while True:
+                try:
+                    chrome.goto(profile_link, wait_elem_selector="form.search-form")
+                    if check_captcha(
+                        chrome=chrome,
+                        wait_elem_selector="form.search-form",
+                    ):
+                        body_html = chrome.body()
 
-            body_html = chrome.body()
+                        with profile_fpath.open("w") as file:
+                            json.dump(
+                                {
+                                    "cat": cat_name,
+                                    "profile": profile_index,
+                                    "html": body_html,
+                                },
+                                file,
+                            )
+                        break
+                except Exception as ex:
+                    logger.exception(ex)
 
-            with profile_fpath.open("w") as file:
-                json.dump(
-                    {
-                        "cat": cat_name,
-                        "profile": profile_index,
-                        "html": body_html,
-                    },
-                    file,
+                user_data_dir = CUR_DIR / "temp" / f"profile_{time.time()}"
+                chrome = Chrome(
+                    width=800,
+                    height=600,
+                    block_image=True,
+                    user_data_dir=str(user_data_dir),
                 )
+                chrome.start()
 
     chrome.quit()
 
