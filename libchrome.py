@@ -7,12 +7,12 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from threading import Thread
 from typing import Any, Optional
 
 import userpaths
 from loguru import logger
-
-from libwebsocket import WebSocketServer
+from websockets.sync.server import ServerConnection, serve
 
 CUR_DIR = str(Path(__file__).parent.absolute())
 TEMP_DIR = os.path.join(CUR_DIR, "temp")
@@ -36,16 +36,16 @@ class Chrome:
         user_data_dir: Optional[str] = None,
         user_agent: Optional[str] = None,
     ):
-        self.__init_url = init_url
-        self.__left = left
-        self.__top = top
-        self.__width = width
-        self.__height = height
-        self.__block_image = block_image
-        self.__user_data_dir = user_data_dir
-        self.__user_agent = user_agent
-        self.__process = None
-        self.__client_unit = None
+        self._init_url: str = init_url
+        self._left: int = left
+        self._top: int = top
+        self._width: int = width
+        self._height: int = height
+        self._block_image: bool = block_image
+        self._user_data_dir: Optional[str] = user_data_dir
+        self._user_agent: Optional[str] = user_agent
+        self._process = None
+        self._client_unit: Optional[ServerConnection] = None
 
     def __find_port(self) -> int:
         with socket.socket() as s:
@@ -55,9 +55,9 @@ class Chrome:
     def __send_command(self, msg: str, payload: Optional[str] = None) -> Any:
         ret = None
         try:
-            if self.__client_unit is not None:
+            if self._client_unit is not None:
                 if payload is not None:
-                    self.__client_unit.send(
+                    self._client_unit.send(
                         json.dumps(
                             {
                                 "msg": msg,
@@ -66,14 +66,14 @@ class Chrome:
                         )
                     )
                 else:
-                    self.__client_unit.send(
+                    self._client_unit.send(
                         json.dumps(
                             {
                                 "msg": msg,
                             }
                         )
                     )
-                resp = self.__client_unit.recv()
+                resp = self._client_unit.recv()
                 if resp is not None:
                     js_res = json.loads(resp)["result"]
                     if js_res != "<undefined>":
@@ -86,6 +86,16 @@ class Chrome:
         except Exception as ex:
             logger.exception(ex)
         return ret
+
+    def __start_server(self, port: int):
+        def echo(websocket):
+            logger.info("client connected")
+            self._client_unit = websocket
+            while True:
+                time.sleep(1)
+
+        with serve(echo, "127.0.0.1", port, max_size=2**27) as server:
+            server.serve_forever()
 
     def start(self):
         chrome_path = ""
@@ -104,8 +114,7 @@ class Chrome:
             port = self.__find_port()
 
             # start socket server
-            websocket_server = WebSocketServer("127.0.0.1", port)
-            websocket_server.start()
+            Thread(target=self.__start_server, args=(port,)).start()
 
             # copy extension to temp folder
             ext_dir = os.path.join(TEMP_DIR, f"ext_{datetime.now().timestamp()}")
@@ -119,51 +128,53 @@ class Chrome:
                 f.write(background_js_content.replace("{PORT}", f"{port}"))
 
             # remove old profile folder
-            if self.__user_data_dir is None:
-                self.__user_data_dir = os.path.join(TEMP_DIR, "profile")
+            if self._user_data_dir is None:
+                self._user_data_dir = os.path.join(TEMP_DIR, "profile")
 
             # start chrome
             cmd = [chrome_path]
-            cmd.append(f"--user-data-dir={self.__user_data_dir}")
+            cmd.append(f"--user-data-dir={self._user_data_dir}")
             if os.path.isdir(ext_dir):
                 cmd.append(f"--load-extension={ext_dir}")
 
-            if self.__left * self.__top != 0:
-                cmd.append(f"--window-position={self.__left},{self.__top}")
+            if self._left * self._top != 0:
+                cmd.append(f"--window-position={self._left},{self._top: int}")
 
-            if self.__width * self.__height != 0:
-                cmd.append(f"--window-size={self.__width},{self.__height}")
+            if self._width * self._height != 0:
+                cmd.append(f"--window-size={self._width: int},{self._height}")
 
-            if self.__block_image:
+            if self._block_image:
                 cmd.append("--blink-settings=imagesEnabled=false")
 
-            if self.__user_agent is not None:
-                cmd.append(f"--user-agent={self.__user_agent}")
+            if self._user_agent is not None:
+                cmd.append(f"--user-agent={self._user_agent}")
 
-            if self.__init_url != "":
-                cmd.append(self.__init_url)
+            if self._init_url != "":
+                cmd.append(self._init_url)
 
-            self.__process = subprocess.Popen(cmd)
-            time.sleep(5)
+            self._process = subprocess.Popen(cmd)
 
             # accept
-            self.__client_unit = websocket_server.accept()
+            while True:
+                if self._client_unit is not None:
+                    break
+                time.sleep(0.1)
             logger.info("client connected")
         else:
             logger.error("chrome.exe not found")
 
     def quit(self):
-        if self.__process is not None:
-            self.__process.terminate()
-            self.__process = None
+        if self._process is not None:
+            self._process.terminate()
+            self._process = None
 
-        if self.__client_unit is not None:
-            self.__client_unit.close()
-            self.__client_unit = None
+        if self._client_unit is not None:
+            self._client_unit.close()
+            self._client_unit = None
 
-        self.__width = 0
-        self.__height = 0
-        self.__block_image = True
+        self._width: int = 0
+        self._height = 0
+        self._block_image = True
 
     def run_script(self, script: str) -> Optional[str]:
         return self.__send_command("runScript", script)
@@ -226,10 +237,10 @@ class Chrome:
         )
 
     def head(self) -> Optional[str]:
-        self.run_script("document.head.outerHTML")
+        return self.run_script("document.head.outerHTML")
 
     def body(self) -> Optional[str]:
-        self.run_script("document.body.outerHTML")
+        return self.run_script("document.body.outerHTML")
 
     def select(self, selector: str) -> list[ChromeElem]:
         ret = []
