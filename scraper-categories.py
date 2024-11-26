@@ -115,7 +115,7 @@ def main():
             page_fpath = category_dpath / f"{page_number}.json"
 
             body_html = chrome.body()
-            soup = BeautifulSoup(body_html)
+            soup = BeautifulSoup(body_html, "html.parser")
 
             with page_fpath.open("w") as file:
                 json.dump(
